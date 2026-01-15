@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  EXPIRED
+  PENDING_PAYMENT // reservado para fase Mercado Pago
+}
+
+model Tenant {
+  id                   String   @id @default(uuid())
+  name                 String
+  slug                 String   @unique
+  timezone             String   @default("America/Fortaleza")
+  slotIntervalMinutes  Int      @default(15)
+  signalPercentDefault Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  users          User[]
+  services       Service[]
+  businessHours  BusinessHour[]
+  scheduleBlocks ScheduleBlock[]
+  customers      Customer[]
+  bookings       Booking[]
+  bookingLinks   BookingLink[]
+}
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(ADMIN)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Service {
+  id                    String   @id @default(uuid())
+  tenantId              String
+  tenant                Tenant   @relation(fields: [tenantId], references: [id])
+  name                  String
+  durationMinutes       Int
+  priceCents            Int
+  signalPercentOverride Int?
+  active                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  bookings     Booking[]
+  bookingLinks BookingLink[]
+}
+
+model BusinessHour {
+  id        String  @id @default(uuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  weekday   Int // 0=Sunday ... 6=Saturday (Luxon)
+  startTime String // "09:00"
+  endTime   String // "18:00"
+  active    Boolean @default(true)
+
+  @@index([tenantId, weekday])
+}
+
+model ScheduleBlock {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  startAt   DateTime
+  endAt     DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, startAt, endAt])
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  phone     String
+  email     String?
+  createdAt DateTime @default(now())
+
+  bookings Booking[]
+
+  @@index([tenantId, phone])
+}
+
+model Booking {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  serviceId  String
+  service    Service  @relation(fields: [serviceId], references: [id])
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  code    String        @unique
+  startAt DateTime
+  endAt   DateTime
+  status  BookingStatus @default(CONFIRMED)
+
+  totalPriceCents      Int
+  signalPercentApplied Int
+  signalAmountCents    Int
+  expiresAt            DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, startAt, endAt])
+  @@index([tenantId, status])
+}
+
+model BookingLink {
+  id       String @id @default(uuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+
+  token  String  @unique
+  active Boolean @default(true)
+
+  // opcional: se quiser restringir o link a um serviço específico
+  serviceId String?
+  service   Service? @relation(fields: [serviceId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, active])
+}
