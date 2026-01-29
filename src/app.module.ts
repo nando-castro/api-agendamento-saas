@@ -5,12 +5,14 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PublicLinksModule } from './public-links/public-links.module';
 import { PublicModule } from './public/public.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { ServicesModule } from './services/services.module';
 import { TenantsModule } from './tenants/tenants.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { TenantsModule } from './tenants/tenants.module';
     BookingsModule,
     PublicLinksModule,
     PublicModule,
+    PaymentsModule,
+    WebhooksModule,
   ],
   controllers: [AppController],
   providers: [AppService],
