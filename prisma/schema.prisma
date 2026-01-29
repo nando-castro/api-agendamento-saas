@@ -24,6 +24,19 @@ enum BookingStatus {
   PENDING_PAYMENT // reservado para fase Mercado Pago
 }
 
+enum PaymentProvider {
+  MERCADOPAGO
+}
+
+enum PaymentMethod {
+  PIX
+}
+
+enum PaymentIntent {
+  SIGNAL // cobrar apenas o sinal (signalAmountCents)
+  TOTAL  // cobrar o total (totalPriceCents)
+}
+
 model Tenant {
   id                   String   @id @default(uuid())
   name                 String
@@ -41,6 +54,7 @@ model Tenant {
   customers      Customer[]
   bookings       Booking[]
   bookingLinks   BookingLink[]
+  payments       Payment[]
 }
 
 model User {
@@ -131,6 +145,8 @@ model Booking {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  payments Payment[]
+
   @@index([tenantId, startAt, endAt])
   @@index([tenantId, status])
 }
@@ -150,4 +166,48 @@ model BookingLink {
   createdAt DateTime @default(now())
 
   @@index([tenantId, active])
+}
+
+model Payment {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+
+  bookingId  String
+  booking    Booking  @relation(fields: [bookingId], references: [id])
+
+  provider   PaymentProvider
+  method     PaymentMethod
+  intent     PaymentIntent
+
+  amountCents Int
+
+  // Status vindo do Mercado Pago (pending/approved/rejected/cancelled...)
+  status       String
+  statusDetail String?
+
+  // IDs externos
+  mpPaymentId        String? @unique
+  mpIdempotencyKey   String  @unique
+  mpExternalRef      String? // ex: bookingId (redundante mas útil)
+
+  // PIX payload
+  qrCode        String?
+  qrCodeBase64  String?
+  ticketUrl     String?
+  expiresAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, bookingId])
+  @@index([tenantId, status])
+}
+
+model WebhookEvent {
+  id         String   @id @default(uuid())
+  provider   PaymentProvider
+  eventKey   String   @unique // chave para idempotência do webhook
+  payload    Json
+  receivedAt DateTime @default(now())
 }
