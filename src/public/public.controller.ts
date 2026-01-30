@@ -53,4 +53,24 @@ export class PublicController {
       serviceId: effectiveServiceId,
     });
   }
+
+  // ✅ NOVO: buscar booking para polling
+  @Get('links/:token/bookings/:bookingId')
+  async getBookingByToken(
+    @Param('token') token: string,
+    @Param('bookingId') bookingId: string,
+  ) {
+    const link = await this.pub.resolveToken(token);
+    return this.bookings.getByIdForPublic(link.tenantId, bookingId);
+  }
+
+  // ✅ NOVO: cancelar (rollback) se PIX falhar
+  @Post('links/:token/bookings/:bookingId/cancel')
+  async cancelBookingByToken(
+    @Param('token') token: string,
+    @Param('bookingId') bookingId: string,
+  ) {
+    const link = await this.pub.resolveToken(token);
+    return this.bookings.cancelPendingByPublic(link.tenantId, bookingId);
+  }
 }

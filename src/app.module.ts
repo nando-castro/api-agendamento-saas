@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { DevModule } from './dev/dev.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PublicLinksModule } from './public-links/public-links.module';
@@ -28,6 +29,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     PublicModule,
     PaymentsModule,
     WebhooksModule,
+    DevModule,
   ],
   controllers: [AppController],
   providers: [AppService],

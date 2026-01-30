@@ -16,7 +16,23 @@ function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
 export class BookingsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly PAYMENT_WINDOW_MINUTES = 30;
+
+  private async expireOldPendingBookings(tenantId: string) {
+    await this.prisma.booking.updateMany({
+      where: {
+        tenantId,
+        status: 'PENDING_PAYMENT',
+        expiresAt: { not: null, lt: new Date() },
+      },
+      data: { status: 'EXPIRED' },
+    });
+  }
+
   async create(tenantId: string, dto: CreateBookingDto) {
+    // ✅ garante que pendências antigas não bloqueiem horário
+    await this.expireOldPendingBookings(tenantId);
+
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
     });
@@ -40,10 +56,11 @@ export class BookingsService {
     const bh = await this.prisma.businessHour.findMany({
       where: { tenantId, weekday: weekday0Sunday, active: true },
     });
-    if (bh.length === 0)
+    if (bh.length === 0) {
       throw new BadRequestException(
         'Sem horário de funcionamento para este dia.',
       );
+    }
 
     const withinBusinessHours = bh.some((h) => {
       const [sh, sm] = h.startTime.split(':').map(Number);
@@ -56,8 +73,9 @@ export class BookingsService {
       return start >= ws && end <= we;
     });
 
-    if (!withinBusinessHours)
+    if (!withinBusinessHours) {
       throw new BadRequestException('Fora do horário de funcionamento.');
+    }
 
     // Conflito com bloqueios
     const blocks = await this.prisma.scheduleBlock.findMany({
@@ -75,6 +93,8 @@ export class BookingsService {
       throw new BadRequestException('Horário indisponível (bloqueio).');
 
     // Conflito com bookings existentes
+    // ✅ não considera CANCELLED / EXPIRED
+    // ✅ e também ignora PENDING_PAYMENT já expirado (mesmo se ainda não foi atualizado)
     const existing = await this.prisma.booking.findMany({
       where: {
         tenantId,
@@ -82,11 +102,22 @@ export class BookingsService {
         endAt: { gt: start.toJSDate() },
         status: { notIn: ['CANCELLED', 'EXPIRED'] },
       },
+      select: {
+        startAt: true,
+        endAt: true,
+        status: true,
+        expiresAt: true,
+      },
     });
 
-    const conflict = existing.some((b) =>
-      overlaps(start.toJSDate(), end.toJSDate(), b.startAt, b.endAt),
-    );
+    const now = new Date();
+    const conflict = existing.some((b) => {
+      if (b.status === 'PENDING_PAYMENT' && b.expiresAt && b.expiresAt < now) {
+        return false; // não bloqueia, já expirou
+      }
+      return overlaps(start.toJSDate(), end.toJSDate(), b.startAt, b.endAt);
+    });
+
     if (conflict)
       throw new BadRequestException('Horário indisponível (já reservado).');
 
@@ -112,6 +143,14 @@ export class BookingsService {
       (totalPriceCents * signalPercentApplied) / 100,
     );
 
+    // ✅ regra: se tem sinal > 0, exige pagamento
+    const requiresPayment = signalAmountCents > 0;
+
+    const status = requiresPayment ? 'PENDING_PAYMENT' : 'CONFIRMED';
+    const expiresAt = requiresPayment
+      ? new Date(Date.now() + this.PAYMENT_WINDOW_MINUTES * 60 * 1000)
+      : null;
+
     // code único
     const code = nanoid(10);
 
@@ -123,11 +162,11 @@ export class BookingsService {
         code,
         startAt: start.toJSDate(),
         endAt: end.toJSDate(),
-        status: 'CONFIRMED',
+        status,
         totalPriceCents,
         signalPercentApplied,
         signalAmountCents,
-        expiresAt: null,
+        expiresAt,
       },
       include: {
         service: true,
@@ -136,7 +175,10 @@ export class BookingsService {
     });
   }
 
-  list(tenantId: string, fromIso: string, toIso: string) {
+  async list(tenantId: string, fromIso: string, toIso: string) {
+    // ✅ mantém a lista “limpa” também
+    await this.expireOldPendingBookings(tenantId);
+
     return this.prisma.booking.findMany({
       where: {
         tenantId,
@@ -149,5 +191,39 @@ export class BookingsService {
         customer: true,
       },
     });
+  }
+
+  // ✅ NOVO: usado pelo público pra polling
+  async getByIdForPublic(tenantId: string, bookingId: string) {
+    const booking = await this.prisma.booking.findFirst({
+      where: { id: bookingId, tenantId },
+      include: { service: true, customer: true },
+    });
+
+    if (!booking) throw new NotFoundException('Agendamento não encontrado.');
+    return booking;
+  }
+
+  // ✅ NOVO: rollback quando PIX falhar
+  async cancelPendingByPublic(tenantId: string, bookingId: string) {
+    const booking = await this.prisma.booking.findFirst({
+      where: { id: bookingId, tenantId },
+      select: { id: true, status: true },
+    });
+
+    if (!booking) throw new NotFoundException('Agendamento não encontrado.');
+
+    if (booking.status !== 'PENDING_PAYMENT') {
+      throw new BadRequestException(
+        'Só é possível cancelar agendamentos aguardando pagamento.',
+      );
+    }
+
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'CANCELLED', expiresAt: null },
+    });
+
+    return { ok: true };
   }
 }
