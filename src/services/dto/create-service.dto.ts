@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsOptional, Min } from 'class-validator';
 
 export class CreateServiceDto {
   @IsNotEmpty()
@@ -16,4 +16,8 @@ export class CreateServiceDto {
   @IsInt()
   @Min(0)
   signalPercentOverride?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  active?: boolean;
 }
