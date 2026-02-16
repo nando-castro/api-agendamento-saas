@@ -82,8 +82,14 @@ export class AvailabilityService {
     }));
 
     const now = DateTime.now().setZone(zone);
-    const slotInterval = tenant.slotIntervalMinutes;
-    const duration = service.durationMinutes;
+    const slotInterval =
+      service.durationMinutes === 0
+        ? 30 // a cada 30min quando variável
+        : tenant.slotIntervalMinutes;
+    const duration =
+      service.durationMinutes === 0
+        ? 30 // slot "ocupa" 30min (para conflito)
+        : service.durationMinutes;
 
     // Janela de trabalho pode ser múltipla (ex: manhã e tarde no futuro)
     const workRanges: Range[] = businessHours.map((h) => {
@@ -104,10 +110,8 @@ export class AvailabilityService {
     const slots: Array<{ startAt: string; endAt: string }> = [];
 
     for (const wr of workRanges) {
-      // segurança: se end <= start, ignora
       if (wr.end <= wr.start) continue;
 
-      // iterate no intervalo em passos de slotInterval
       let cursor = wr.start;
 
       while (cursor.plus({ minutes: duration }) <= wr.end) {
@@ -136,7 +140,7 @@ export class AvailabilityService {
           });
         }
 
-        cursor = cursor.plus({ minutes: slotInterval });
+        cursor = cursor.plus({ minutes: slotInterval }); // ✅ pula 30min
       }
     }
 
@@ -144,8 +148,8 @@ export class AvailabilityService {
       date,
       timezone: zone,
       serviceId,
-      durationMinutes: duration,
-      slotIntervalMinutes: slotInterval,
+      durationMinutes: service.durationMinutes, // original (0 para variável)
+      slotIntervalMinutes: slotInterval, // 30 para variável
       slots,
     };
   }
