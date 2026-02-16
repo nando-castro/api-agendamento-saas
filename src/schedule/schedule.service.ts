@@ -25,7 +25,6 @@ export class ScheduleService {
       active: boolean;
     }>,
   ) {
-    // substitui tudo por transação
     await this.prisma.$transaction([
       this.prisma.businessHour.deleteMany({ where: { tenantId } }),
       this.prisma.businessHour.createMany({
@@ -48,8 +47,9 @@ export class ScheduleService {
     endAt: Date,
     reason?: string,
   ) {
-    if (endAt <= startAt)
+    if (endAt <= startAt) {
       throw new BadRequestException('endAt deve ser maior que startAt.');
+    }
 
     return this.prisma.scheduleBlock.create({
       data: { tenantId, startAt, endAt, reason: reason?.trim() || null },
@@ -60,9 +60,7 @@ export class ScheduleService {
     return this.prisma.scheduleBlock.findMany({
       where: {
         tenantId,
-        OR: [
-          { startAt: { lt: to }, endAt: { gt: from } }, // overlap
-        ],
+        OR: [{ startAt: { lt: to }, endAt: { gt: from } }],
       },
       orderBy: { startAt: 'asc' },
     });

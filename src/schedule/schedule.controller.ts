@@ -10,7 +10,6 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { DateTime } from 'luxon';
 import type { AuthenticatedRequest } from '../auth/auth-request.type';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateBlockDto } from './dto/create-block.dto';
@@ -36,12 +35,10 @@ export class ScheduleController {
   }
 
   @Post('blocks')
-  async createBlock(
-    @Req() req: AuthenticatedRequest,
-    @Body() dto: CreateBlockDto,
-  ) {
-    const startAt = DateTime.fromISO(dto.startAt).toJSDate();
-    const endAt = DateTime.fromISO(dto.endAt).toJSDate();
+  createBlock(@Req() req: AuthenticatedRequest, @Body() dto: CreateBlockDto) {
+    const startAt = new Date(dto.startAt);
+    const endAt = new Date(dto.endAt);
+
     return this.schedule.createBlock(
       req.user.tenantId,
       startAt,
@@ -56,8 +53,9 @@ export class ScheduleController {
     @Query('from') from: string,
     @Query('to') to: string,
   ) {
-    const fromDt = DateTime.fromISO(from).toJSDate();
-    const toDt = DateTime.fromISO(to).toJSDate();
+    // ✅ converte query params string → Date
+    const fromDt = new Date(from);
+    const toDt = new Date(to);
     return this.schedule.listBlocks(req.user.tenantId, fromDt, toDt);
   }
 

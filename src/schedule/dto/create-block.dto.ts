@@ -1,10 +1,11 @@
-import { IsISO8601, IsOptional, IsString } from 'class-validator';
+// create-block.dto.ts
+import { IsDateString, IsOptional, IsString } from 'class-validator';
 
 export class CreateBlockDto {
-  @IsISO8601()
+  @IsDateString()
   startAt!: string;
 
-  @IsISO8601()
+  @IsDateString()
   endAt!: string;
 
   @IsOptional()

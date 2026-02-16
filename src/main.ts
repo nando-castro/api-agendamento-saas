@@ -1,3 +1,4 @@
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
@@ -11,6 +12,13 @@ async function bootstrap() {
     'http://localhost:5173',
     'https://app-agendamento-saas.vercel.app',
   ];
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+    }),
+  );
 
   app.enableCors({
     origin: (origin: string | undefined, cb: CorsOriginCallback) => {
