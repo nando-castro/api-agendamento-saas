@@ -13,6 +13,7 @@ import { PublicModule } from './public/public.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { ServicesModule } from './services/services.module';
 import { TenantsModule } from './tenants/tenants.module';
+import { ThemeModule } from './theme/theme.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     PaymentsModule,
     WebhooksModule,
     DevModule,
+    ThemeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

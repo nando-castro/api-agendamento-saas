@@ -30,6 +30,9 @@ export class BookingsService {
   }
 
   async create(tenantId: string, dto: CreateBookingDto) {
+    if (!dto.customer) {
+      throw new BadRequestException('customer é obrigatório.');
+    }
     // ✅ garante que pendências antigas não bloqueiem horário
     await this.expireOldPendingBookings(tenantId);
 

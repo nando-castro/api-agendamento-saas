@@ -37,6 +37,26 @@ enum PaymentIntent {
   TOTAL  // cobrar o total (totalPriceCents)
 }
 
+enum PlanType {
+  BASIC
+  PRO
+  BUSINESS
+}
+
+enum LimitKey {
+  SERVICES_ACTIVE_MAX
+  LINKS_ACTIVE_MAX
+  BOOKINGS_PER_MONTH_MAX
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
 model Tenant {
   id                   String   @id @default(uuid())
   name                 String
@@ -44,17 +64,34 @@ model Tenant {
   timezone             String   @default("America/Fortaleza")
   slotIntervalMinutes  Int      @default(15)
   signalPercentDefault Int      @default(0)
+
+  // --- Billing / Plano ---
+  planType             PlanType           @default(BASIC)
+  subscriptionStatus   SubscriptionStatus @default(TRIALING)
+  currentPeriodStartAt DateTime?
+  currentPeriodEndAt   DateTime?
+
+  // ids externos (Stripe futuramente)
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+
+  // --- Tema (claro/escuro + custom por tenant) ---
+  theme                Json?
+
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  users          User[]
-  services       Service[]
-  businessHours  BusinessHour[]
-  scheduleBlocks ScheduleBlock[]
-  customers      Customer[]
-  bookings       Booking[]
-  bookingLinks   BookingLink[]
-  payments       Payment[]
+  users                User[]
+  services             Service[]
+  businessHours        BusinessHour[]
+  scheduleBlocks       ScheduleBlock[]
+  customers            Customer[]
+  bookings             Booking[]
+  bookingLinks         BookingLink[]
+  payments             Payment[]
+
+  tenantLimitOverride  TenantLimitOverride[]
+  tenantMonthlyUsage   TenantMonthlyUsage[]
 }
 
 model User {
@@ -81,18 +118,18 @@ model Service {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  bookings     Booking[]
-  bookingLinks BookingLink[]
+  bookings              Booking[]
+  bookingLinks          BookingLink[]
 }
 
 model BusinessHour {
-  id        String  @id @default(uuid())
-  tenantId  String
-  tenant    Tenant  @relation(fields: [tenantId], references: [id])
-  weekday   Int // 0=Sunday ... 6=Saturday (Luxon)
+  id       String  @id @default(uuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id])
+  weekday  Int     // 0=Sunday ... 6=Saturday (Luxon)
   startTime String // "09:00"
   endTime   String // "18:00"
-  active    Boolean @default(true)
+  active   Boolean @default(true)
 
   @@index([tenantId, weekday])
 }
@@ -118,7 +155,7 @@ model Customer {
   email     String?
   createdAt DateTime @default(now())
 
-  bookings Booking[]
+  bookings  Booking[]
 
   @@index([tenantId, phone])
 }
@@ -137,10 +174,10 @@ model Booking {
   endAt   DateTime
   status  BookingStatus @default(CONFIRMED)
 
-  totalPriceCents      Int
-  signalPercentApplied Int
-  signalAmountCents    Int
-  expiresAt            DateTime?
+  totalPriceCents       Int
+  signalPercentApplied  Int
+  signalAmountCents     Int
+  expiresAt             DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -169,16 +206,16 @@ model BookingLink {
 }
 
 model Payment {
-  id         String   @id @default(uuid())
-  tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
-  bookingId  String
-  booking    Booking  @relation(fields: [bookingId], references: [id])
+  bookingId String
+  booking   Booking  @relation(fields: [bookingId], references: [id])
 
-  provider   PaymentProvider
-  method     PaymentMethod
-  intent     PaymentIntent
+  provider  PaymentProvider
+  method    PaymentMethod
+  intent    PaymentIntent
 
   amountCents Int
 
@@ -189,13 +226,13 @@ model Payment {
   // IDs externos
   mpPaymentId        String? @unique
   mpIdempotencyKey   String  @unique
-  mpExternalRef      String? // ex: bookingId (redundante mas útil)
+  mpExternalRef      String?
 
   // PIX payload
-  qrCode        String?
-  qrCodeBase64  String?
-  ticketUrl     String?
-  expiresAt     DateTime?
+  qrCode       String?
+  qrCodeBase64 String?
+  ticketUrl    String?
+  expiresAt    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -207,7 +244,59 @@ model Payment {
 model WebhookEvent {
   id         String   @id @default(uuid())
   provider   PaymentProvider
-  eventKey   String   @unique // chave para idempotência do webhook
+  eventKey   String   @unique
   payload    Json
   receivedAt DateTime @default(now())
+}
+
+model PlanLimit {
+  id       String   @id @default(uuid())
+  planType PlanType
+  key      LimitKey
+  valueInt Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([planType, key])
+}
+
+model TenantLimitOverride {
+  id       String   @id @default(uuid())
+  tenantId String
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+
+  key      LimitKey
+  deltaInt Int
+
+  // Para boost mensal de BOOKINGS_PER_MONTH_MAX, preencha "YYYY-MM" (ex: "2026-02")
+  yearMonth String?
+
+  // Para boosts genéricos por tempo (ex: +links por 30 dias)
+  expiresAt DateTime?
+
+  reason   String?
+  source   String?
+  refId    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, key, expiresAt])
+  @@index([tenantId, key, yearMonth])
+}
+
+model TenantMonthlyUsage {
+  id              String   @id @default(uuid())
+  tenantId         String
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+
+  yearMonth        String   // "2026-02"
+  bookingsCreated  Int      @default(0)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tenantId, yearMonth])
+  @@index([tenantId, yearMonth])
 }
