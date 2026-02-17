@@ -7,7 +7,7 @@ export class UpdateServiceDto {
 
   @IsOptional()
   @IsInt()
-  @Min(1)
+  @Min(0)
   durationMinutes?: number;
 
   @IsOptional()

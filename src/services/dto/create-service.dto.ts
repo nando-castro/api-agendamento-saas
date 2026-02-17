@@ -5,7 +5,7 @@ export class CreateServiceDto {
   name!: string;
 
   @IsInt()
-  @Min(1)
+  @Min(0)
   durationMinutes!: number;
 
   @IsInt()
